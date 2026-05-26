@@ -1,307 +1,411 @@
-# AI-Driven Session-Based Preparation and Assessment Platform
+# PrepAI
 
-Інформаційна система підготовки до співбесід, екзаменів та публічних виступів із використанням методів AI та ML.
+PrepAI is a session-based preparation and assessment platform for interviews, exams, and oral-answer practice. The system separates repeatable self-training from mentor-controlled assessment and uses a dedicated AI/ML service for answer analysis, file parsing, and future inference extensions.
 
-## Архітектура
+The core domain flow is:
 
-Проєкт складається з трьох основних компонентів:
-
-### 1. Frontend (React + Vite)
-- Сучасний UI з градієнтами та анімаціями (Statify-inspired)
-- React 18 + Vite
-- Tailwind CSS + Framer Motion
-- Zustand для state management
-- JWT authentication
-- Responsive design
-
-### 2. Backend API
-- FastAPI-based REST API
-- Управління користувачами, шаблонами, спробами
-- Бізнес-логіка системи
-- База даних (PostgreSQL)
-- Аутентифікація та авторизація
-
-### 3. AI/ML Service
-- Окремий мікросервіс для AI/ML операцій
-- Gemini API integration
-- Speech-to-Text (транскрипція голосових відповідей)
-- NLP аналіз текстових відповідей
-- Semantic similarity evaluation
-- Генерація питань, відповідей, критеріїв
-- Генерація feedback та recommendations
-
-## Основна концепція
-
-**Session = Template + Attempts**
-
-### Типи сесій:
-1. **Practice Session** - тренувальний режим (AI-only evaluation)
-2. **Assessment Session** - оціночний режим (AI preliminary + Mentor final review)
-
-### Ролі:
-- **Guest** - перегляд публічної інформації
-- **User** - створення practice templates, проходження attempts
-- **Mentor** (extends User) - створення assessment templates, mentor review
-
-## Technology Stack
-
-### Frontend:
-- React 18
-- Vite
-- Tailwind CSS
-- Framer Motion (animations)
-- Zustand (state management)
-- React Router
-- Axios
-- Lucide React (icons)
-
-### Backend:
-- Python 3.11+
-- FastAPI
-- SQLAlchemy (ORM)
-- PostgreSQL
-- Alembic (migrations)
-- Pydantic (validation)
-- JWT authentication
-
-### AI/ML Service:
-- Python 3.11+
-- FastAPI
-- Google Gemini API
-- Speech-to-Text API
-- Sentence Transformers (embeddings)
-- NumPy, scikit-learn
-
-### Deployment:
-- Docker + Docker Compose
-- Nginx (reverse proxy)
-
-## Структура проєкту
-
+```text
+template -> attempt -> answer -> AI evaluation -> mentor review -> result analytics
 ```
+
+PrepAI is not designed as a generic chatbot wrapper. The main value of the system is the controlled session lifecycle: templates define questions and answer modes, attempts store how a user passed a session, AI evaluation provides a preliminary technical score, and the mentor can make the final decision for assessment sessions.
+
+## Main Features
+
+- Practice sessions for repeatable user training.
+- Assessment sessions created and reviewed by mentors.
+- Text, voice, and voice/video answer modes.
+- Question template import from `.txt` and text-layer `.pdf` files.
+- Public and private template sharing through links and invitations.
+- One-attempt assessment flow.
+- Mentor review with final score, comment, and override reason.
+- AI-assisted answer evaluation on a 0-100 scale.
+- Submitted answer review after completion.
+- Dashboard with score dynamics for week, month, year, and all-time ranges.
+- Frontend video metrics summary for voice/video attempts.
+- PostgreSQL migrations, demo seeding, and demo-data validation.
+
+## Architecture
+
+The project is split into three application parts and one persistent database:
+
+```text
+frontend       React + Vite user interface
+backend        FastAPI domain API
+ai_ml_service  FastAPI analysis service
+postgres       PostgreSQL database
+```
+
+The backend is the owner of domain rules. It handles authentication, authorization, template permissions, attempt lifecycle, invitation validation, mentor workflow, database transactions, and persistence.
+
+The AI/ML service is intentionally separated from the backend. Answer analysis, text extraction, transcription hooks, and future model inference can be slower or less predictable than regular API operations. Keeping them in a separate service gives a cleaner boundary and allows the main backend flow to remain stable if AI processing becomes unavailable or needs to be scaled separately.
+
+The current implementation uses a pragmatic monolith plus AI/ML-service architecture. The backend remains one coherent domain application, while AI-heavy processing is isolated behind HTTP calls.
+
+## Runtime Stack
+
+Frontend:
+
+- React 18;
+- Vite;
+- Tailwind CSS;
+- shadcn-style local UI components;
+- Lucide icons;
+- React Router;
+- Zustand;
+- Axios;
+- browser MediaDevices, MediaRecorder, and Web Speech APIs where supported.
+
+Backend:
+
+- FastAPI;
+- SQLAlchemy ORM;
+- Alembic migrations;
+- PostgreSQL;
+- JWT authentication;
+- Pydantic schemas;
+- service layer for attempts, templates, mentor flow, analytics, and AI/ML integration.
+
+AI/ML service:
+
+- FastAPI;
+- local heuristic text analysis;
+- `.txt` extraction;
+- text-layer `.pdf` extraction through `pypdf`;
+- Q/A parsing;
+- extension endpoints for transcription and video analysis.
+
+Database:
+
+- PostgreSQL is the only durable database.
+- Redis is not used in the current version.
+- Blob storage is not used in the current version.
+- Raw video is not stored in PostgreSQL.
+
+## Storage Model
+
+PostgreSQL stores users, templates, questions, attempts, answers, evaluations, mentor feedback, share links, and video metrics summaries.
+
+The `answers` table contains `audio_url` and `video_url` fields as extension points for future media storage. In the current MVP they should not be treated as permanent blob storage. Voice/video assessment flow stores answer text or transcript data and aggregated metrics summaries, not raw media files.
+
+This is intentional: raw video would quickly increase storage size and create stronger privacy and retention requirements. PrepAI stores the information needed for scoring and review without turning the database into a media archive.
+
+## User Roles
+
+Guest:
+
+- opens public pages;
+- registers;
+- logs in.
+
+User:
+
+- creates practice templates;
+- imports questions;
+- passes practice sessions;
+- joins assessment sessions through links or invitations;
+- views own attempts, scores, and mentor feedback.
+
+Mentor:
+
+- creates assessment templates;
+- imports questions and reference answers;
+- shares templates with public or private access;
+- reviews submitted attempts;
+- sees AI evaluation;
+- sets final score and comment.
+
+A mentor can pass practice sessions and assessment sessions created by other mentors. A mentor cannot pass an assessment created by themselves.
+
+## Session Types
+
+Practice sessions are repeatable and are used for learning. The user may see AI feedback directly after completion.
+
+Assessment sessions are controlled by a mentor. The user should not see reference answers before or during the exam flow. AI evaluation is preliminary, while the mentor score is the final result.
+
+## AI/ML Evaluation
+
+The current AI/ML service is a local heuristic service. It does not depend on external LLM APIs.
+
+Implemented analysis steps:
+
+- normalize and tokenize the submitted answer;
+- tokenize the reference answer and expected concepts;
+- build token-frequency vectors;
+- calculate cosine similarity as a lightweight semantic-overlap estimate;
+- calculate keyword/reference coverage;
+- estimate completeness from answer length and concept coverage;
+- estimate structure from sentence and formatting signals;
+- detect matched and missing concepts;
+- generate detailed feedback and recommendations;
+- aggregate partial metrics into a final score.
+
+Current score aggregation:
+
+```text
+total_score =
+  semantic_score * 0.35 +
+  keyword_score * 0.25 +
+  completeness_score * 0.20 +
+  structure_score * 0.20
+```
+
+The scoring result is advisory in assessment mode. The mentor can confirm, adjust, or override the result because a heuristic evaluator cannot fully understand domain nuance, partial reasoning, oral explanation quality, or grading context.
+
+Reserved extension points:
+
+- production-grade speech-to-text;
+- transformer embeddings;
+- OCR for scanned PDFs;
+- asynchronous inference jobs;
+- retry policy for failed analysis tasks;
+- model versioning;
+- dedicated worker queue.
+
+## Video Metrics
+
+Voice/video mode uses browser-side media access and sends only summarized metrics. Metrics are heuristic and guidance-oriented.
+
+Examples:
+
+- camera status;
+- microphone status;
+- estimated brightness;
+- estimated blur or clarity;
+- face-presence ratio;
+- speaking activity ratio;
+- speaking stability;
+- warning messages;
+- recommendations.
+
+The system does not claim cheating detection, lie detection, emotion recognition, or psychological diagnosis. Video metrics are technical and behavioral hints only.
+
+## Domain Entities
+
+Core entities:
+
+- `User`;
+- `SessionTemplate`;
+- `Question`;
+- `SessionAttempt`;
+- `Answer`;
+- `AIEvaluation`;
+- `MentorFeedback`;
+- `ShareLink`;
+- `VideoAnalysis`.
+
+Supporting entities:
+
+- `AIGenerationCache`;
+- `AIGenerationUsage`.
+
+Important relationship rules:
+
+- `Answer` belongs to `SessionAttempt` and `Question`.
+- `SessionAttempt` connects a user with a template at runtime.
+- `AIEvaluation` is separated from `MentorFeedback`.
+- `ShareLink` models public and private access.
+- `VideoAnalysis` stores summary metrics only.
+
+## Project Structure
+
+```text
 .
-├── frontend/                # Frontend (React + Vite)
+├── ai_ml_service/
+│   ├── app/
+│   │   ├── main.py
+│   │   ├── schemas.py
+│   │   └── services/
+│   │       └── analysis.py
+│   ├── Dockerfile
+│   └── requirements.txt
+├── backend/
+│   ├── alembic/
+│   ├── app/
+│   │   ├── api/
+│   │   ├── core/
+│   │   ├── models/
+│   │   ├── schemas/
+│   │   ├── services/
+│   │   └── main.py
+│   ├── scripts/
+│   │   ├── seed_demo_data.py
+│   │   └── validate_demo_data.py
+│   ├── tests/
+│   ├── Dockerfile
+│   └── requirements.txt
+├── frontend/
 │   ├── src/
-│   │   ├── components/     # UI components
-│   │   ├── pages/          # Page components
-│   │   ├── services/       # API services
-│   │   ├── store/          # Zustand stores
-│   │   └── App.jsx
-│   ├── index.html
-│   ├── vite.config.js
-│   └── package.json
-│
-├── backend/                 # Backend API
-│   ├── app/
-│   │   ├── api/            # API endpoints
-│   │   ├── core/           # Config, security
-│   │   ├── models/         # SQLAlchemy models
-│   │   ├── schemas/        # Pydantic schemas
-│   │   ├── services/       # Business logic
-│   │   └── main.py
-│   ├── alembic/            # DB migrations
-│   ├── tests/
-│   ├── requirements.txt
-│   └── Dockerfile
-│
-├── ai_ml_service/          # AI/ML Service
-│   ├── app/
-│   │   ├── api/            # API endpoints
-│   │   ├── core/           # Config
-│   │   ├── services/       # AI/ML logic
-│   │   │   ├── gemini_service.py
-│   │   │   ├── transcription_service.py
-│   │   │   ├── evaluation_service.py
-│   │   │   └── generation_service.py
-│   │   └── main.py
-│   ├── tests/
-│   ├── requirements.txt
-│   └── Dockerfile
-│
+│   │   ├── app/
+│   │   ├── components/
+│   │   ├── features/
+│   │   ├── shared/
+│   │   └── widgets/
+│   ├── package.json
+│   └── vite.config.js
+├── sample_template_files/
+├── docker-compose.dev.yml
 ├── docker-compose.yml
 └── README.md
 ```
 
-## Встановлення та запуск
+## Quick Start With Docker
 
-### Локальний розвиток
-
-1. Клонувати репозиторій
-2. Створити `.env` файли для frontend, backend та ai_ml_service
-3. Встановити залежності:
+Start the development environment:
 
 ```bash
-# Frontend
-cd frontend
-npm install
-
-# Backend
-cd ../backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-
-# AI/ML Service
-cd ../ai_ml_service
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+docker compose -f docker-compose.dev.yml up --build
 ```
 
-4. Запустити PostgreSQL
-5. Виконати міграції:
+Services:
+
+```text
+Frontend       http://localhost:3000
+Backend API    http://localhost:8000
+AI/ML service  http://localhost:8001
+PostgreSQL     localhost:5432
+```
+
+The development compose file runs migrations on backend startup. It also supports automatic demo seeding through:
+
+```text
+AUTO_SEED=true
+```
+
+## Manual Local Development
+
+Start PostgreSQL first and set `DATABASE_URL`.
+
+Backend:
+
+```bash
+cd backend
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+alembic upgrade head
+uvicorn app.main:app --reload --port 8000
+```
+
+AI/ML service:
+
+```bash
+cd ai_ml_service
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8001
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+## Environment Variables
+
+Backend:
+
+```text
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/prep_system
+AI_ML_SERVICE_URL=http://localhost:8001
+SECRET_KEY=change-me
+API_V1_PREFIX=/api/v1
+LEGACY_API_PREFIX=/api
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+AUTO_SEED=false
+```
+
+Frontend:
+
+```text
+VITE_API_BASE_URL=http://localhost:8000
+VITE_API_VERSION=/api/v1
+VITE_AI_GENERATION_ENABLED=false
+```
+
+## Demo Data
+
+Run migrations:
 
 ```bash
 cd backend
 alembic upgrade head
 ```
 
-6. Запустити сервіси:
+Seed demo data from the project root:
 
 ```bash
-# Frontend (terminal 1)
+python backend/scripts/seed_demo_data.py
+```
+
+Validate demo data:
+
+```bash
+python backend/scripts/validate_demo_data.py
+```
+
+Demo accounts:
+
+```text
+demo.user@example.com
+mentor.demo@example.com
+password123
+```
+
+The seed script is idempotent and uses the ORM models with the configured `DATABASE_URL`. It creates demo users, templates, questions, attempts, answers, AI evaluations, share links, and mentor feedback.
+
+## Main API Areas
+
+Backend API modules:
+
+- authentication;
+- templates;
+- share links;
+- attempts;
+- answers;
+- video metrics summary;
+- mentor review;
+- analytics.
+
+AI/ML service API areas:
+
+- answer evaluation;
+- tokenization;
+- concept matching;
+- detailed feedback;
+- text extraction;
+- Q/A parsing;
+- local template generation;
+- transcription and video-analysis extension endpoints.
+
+## Verification
+
+Frontend build:
+
+```bash
 cd frontend
-npm run dev
-
-# Backend (terminal 2)
-cd backend
-uvicorn app.main:app --reload --port 8000
-
-# AI/ML Service (terminal 3)
-cd ai_ml_service
-uvicorn app.main:app --reload --port 8001
+npm run build
 ```
 
-### Docker Compose
+Python syntax check:
 
 ```bash
-docker-compose up --build
+python -m compileall -q backend/app backend/scripts ai_ml_service/app
 ```
 
-## API Endpoints
-
-### Backend API (port 8000)
-
-#### Authentication
-- `POST /api/auth/register` - реєстрація
-- `POST /api/auth/login` - вхід
-- `GET /api/auth/me` - поточний користувач
-
-#### Templates
-- `POST /api/templates` - створити template
-- `GET /api/templates` - список templates
-- `GET /api/templates/{id}` - деталі template
-- `PUT /api/templates/{id}` - оновити template
-- `DELETE /api/templates/{id}` - видалити template
-
-#### Attempts
-- `POST /api/attempts` - почати attempt
-- `GET /api/attempts/{id}` - деталі attempt
-- `POST /api/attempts/{id}/answers` - надіслати відповідь
-- `POST /api/attempts/{id}/finish` - завершити attempt
-- `POST /api/attempts/{id}/pause` - пауза (practice only)
-
-#### Mentor
-- `GET /api/mentor/assessments` - список assessments для review
-- `GET /api/mentor/attempts/{id}` - деталі attempt для review
-- `POST /api/mentor/attempts/{id}/review` - залишити mentor feedback
-
-### AI/ML Service API (port 8001)
-
-#### Generation
-- `POST /api/ai/generate-template` - згенерувати template з AI
-- `POST /api/ai/generate-questions` - згенерувати питання
-
-#### Evaluation
-- `POST /api/ai/transcribe` - транскрибувати audio
-- `POST /api/ai/evaluate-answer` - оцінити відповідь
-- `POST /api/ai/generate-report` - згенерувати final report
-
-## Core Entities
-
-### SessionTemplate
-- Reusable preparation structure
-- Contains questions, criteria, settings
-- Types: practice, assessment
-- Status: draft, ready, locked, archived
-
-### SessionAttempt
-- One concrete pass of a template
-- Stores answers, evaluations, scores
-- Status: active, paused, completed, under_review, reviewed
-
-### Question
-- Belongs to template
-- Types: text_question, oral_question
-- Contains reference_answer, keywords, criteria
-
-### Answer
-- User's response to question
-- Stores text, audio_url, video_url, transcript
-
-### AIEvaluation
-- AI-generated evaluation of answer
-- Scores: semantic, keyword, structure, completeness
-- Feedback, weak_points, recommendations
-
-### MentorFeedback
-- Mentor review for assessment attempts
-- Final score confirmation or override
-- Comment and override reason
-
-## Workflow Examples
-
-### Practice Session Flow
-1. User створює practice template (file/AI/manual)
-2. User запускає attempt
-3. User відповідає на питання (text/voice/video)
-4. AI транскрибує (якщо voice) та аналізує
-5. AI генерує score та feedback
-6. User завершує attempt
-7. System генерує final report
-8. User може повторити template
-
-### Assessment Session Flow
-1. Mentor створює assessment template
-2. Mentor налаштовує strict rules (timer, deadline, max_attempts)
-3. Mentor ділиться URL з user
-4. User проходить assessment (strict mode)
-5. AI генерує preliminary evaluation
-6. Status → under_review
-7. Mentor переглядає answers та AI score
-8. Mentor confirms або overrides final score
-9. User отримує final result
-
-## Environment Variables
-
-### Backend (.env)
-```
-DATABASE_URL=postgresql://user:password@localhost:5432/prep_system
-SECRET_KEY=your-secret-key
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-AI_ML_SERVICE_URL=http://localhost:8001
-```
-
-### AI/ML Service (.env)
-```
-GEMINI_API_KEY=your-gemini-api-key
-SPEECH_TO_TEXT_API_KEY=your-stt-api-key
-MODEL_NAME=gemini-1.5-pro
-```
-
-## Testing
+Backend tests require PostgreSQL through `TEST_DATABASE_URL` or `DATABASE_URL`:
 
 ```bash
-# Backend tests
 cd backend
-pytest
-
-# AI/ML Service tests
-cd ai_ml_service
 pytest
 ```
 
-## License
+## Notes For Further Development
 
-MIT
+The next major technical step is to add a real asynchronous processing layer for long-running AI/ML work. The current service boundary already supports this direction, but the project does not yet include Redis, Celery, RQ, or a dedicated job table.
+
+Future media storage should be implemented through an external object store or a controlled filesystem/blob layer, not by placing raw media inside PostgreSQL rows.
