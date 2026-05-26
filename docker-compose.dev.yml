@@ -1,0 +1,74 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: prep_system_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: prep_system
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: prep_system_backend
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/prep_system
+      AI_ML_SERVICE_URL: http://ai_ml_service:8001
+      SECRET_KEY: your-secret-key-change-in-production
+      API_V1_PREFIX: /api/v1
+      LEGACY_API_PREFIX: /api
+      DEBUG: "True"
+      AUTO_SEED: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai_ml_service:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+    command: >
+      sh -c "alembic upgrade head
+      && if [ \"$$AUTO_SEED\" = \"true\" ]; then python scripts/seed_demo_data.py --only-empty; fi
+      && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  ai_ml_service:
+    build:
+      context: ./ai_ml_service
+      dockerfile: Dockerfile
+    container_name: prep_system_ai_ml
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./ai_ml_service:/app
+
+  frontend:
+    image: node:18-alpine
+    container_name: prep_system_frontend
+    working_dir: /app
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+      VITE_API_VERSION: /api/v1
+      VITE_AI_GENERATION_ENABLED: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
