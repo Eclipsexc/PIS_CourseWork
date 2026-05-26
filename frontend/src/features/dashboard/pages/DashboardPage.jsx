@@ -98,17 +98,21 @@ export const DashboardPage = () => {
     return points.filter((item) => new Date(item.date).getTime() >= minTime);
   }, [selectedTrendRange.days, userAnalytics?.score_trend]);
 
-  const chartPoints = useMemo(() => {
-    if (!filteredTrend.length) return '';
-    if (filteredTrend.length === 1) {
-      const y = 88 - Math.max(0, Math.min(100, filteredTrend[0].score)) * 0.8;
-      return `8,${y} 94,${y}`;
+  const chartSummary = useMemo(() => {
+    if (!filteredTrend.length) {
+      return {
+        average: 0,
+        best: 0,
+        latest: 0,
+      };
     }
-    return filteredTrend.map((item, index) => {
-      const x = 8 + (index / Math.max(1, filteredTrend.length - 1)) * 86;
-      const y = 88 - Math.max(0, Math.min(100, item.score)) * 0.8;
-      return `${x},${y}`;
-    }).join(' ');
+
+    const scores = filteredTrend.map((item) => Number(item.score) || 0);
+    return {
+      average: scores.reduce((sum, score) => sum + score, 0) / scores.length,
+      best: Math.max(...scores),
+      latest: scores[scores.length - 1],
+    };
   }, [filteredTrend]);
 
   if (loading) {
@@ -224,8 +228,8 @@ export const DashboardPage = () => {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <div className="mb-3 flex items-end justify-between gap-4">
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                           <div>
                             <p className="text-sm font-semibold text-slate-900">
                               {filteredTrend.length} оцінених спроб
@@ -234,50 +238,69 @@ export const DashboardPage = () => {
                               Бал за завершеними сесіями у вибраному діапазоні
                             </p>
                           </div>
-                          <div className="text-right">
-                            <p className="text-xs text-slate-500">Останній бал</p>
-                            <p className={`text-2xl font-bold ${getScoreColor(filteredTrend[filteredTrend.length - 1].score)}`}>
-                              {filteredTrend[filteredTrend.length - 1].score.toFixed(1)}%
-                            </p>
+                          <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2 text-right">
+                            <div className="rounded-xl bg-white px-3 py-2 shadow-sm">
+                              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Середній</p>
+                              <p className={`text-lg font-bold ${getScoreColor(chartSummary.average)}`}>
+                                {chartSummary.average.toFixed(1)}%
+                              </p>
+                            </div>
+                            <div className="rounded-xl bg-white px-3 py-2 shadow-sm">
+                              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Кращий</p>
+                              <p className={`text-lg font-bold ${getScoreColor(chartSummary.best)}`}>
+                                {chartSummary.best.toFixed(1)}%
+                              </p>
+                            </div>
+                            <div className="rounded-xl bg-white px-3 py-2 shadow-sm">
+                              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Останній</p>
+                              <p className={`text-lg font-bold ${getScoreColor(chartSummary.latest)}`}>
+                                {chartSummary.latest.toFixed(1)}%
+                              </p>
+                            </div>
                           </div>
                         </div>
-                        <div className="relative h-72 rounded-xl border border-slate-100 bg-slate-50 px-6 py-5">
-                          <div className="absolute left-10 right-5 top-5 border-t border-slate-200" />
-                          <div className="absolute left-10 right-5 top-1/2 border-t border-slate-200" />
-                          <div className="absolute bottom-8 left-10 right-5 border-t border-slate-300" />
-                          <div className="absolute left-3 top-3 text-xs font-medium text-slate-500">100</div>
-                          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-500">50</div>
-                          <div className="absolute bottom-6 left-5 text-xs font-medium text-slate-500">0</div>
-                          <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="relative z-10 h-full w-full">
-                          <polyline
-                            points={chartPoints}
-                            fill="none"
-                            stroke="hsl(var(--primary))"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            vectorEffect="non-scaling-stroke"
-                          />
-                          {filteredTrend.map((item, index) => {
-                            const x = filteredTrend.length === 1 ? 51 : 8 + (index / Math.max(1, filteredTrend.length - 1)) * 86;
-                            const y = 88 - Math.max(0, Math.min(100, item.score)) * 0.8;
-                            return (
-                              <circle
-                                key={`${item.attempt_id}-${index}`}
-                                cx={x}
-                                cy={y}
-                                r="2"
-                                fill="hsl(var(--primary))"
-                                vectorEffect="non-scaling-stroke"
-                              />
-                            );
-                          })}
-                        </svg>
-                          <div className="absolute bottom-2 left-10 text-xs text-slate-500">
-                            {formatDate(filteredTrend[0].date)}
-                          </div>
-                          <div className="absolute bottom-2 right-5 text-xs text-slate-500">
-                            {formatDate(filteredTrend[filteredTrend.length - 1].date)}
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="grid h-72 grid-cols-[42px_minmax(0,1fr)] gap-3">
+                            <div className="relative text-xs font-medium text-slate-500">
+                              <span className="absolute top-0 right-0">100</span>
+                              <span className="absolute top-1/2 right-0 -translate-y-1/2">50</span>
+                              <span className="absolute bottom-8 right-0">0</span>
+                            </div>
+                            <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white px-4 pb-8 pt-4">
+                              <div className="absolute left-4 right-4 top-4 border-t border-slate-200" />
+                              <div className="absolute left-4 right-4 top-1/2 border-t border-slate-200" />
+                              <div className="absolute bottom-8 left-4 right-4 border-t border-slate-300" />
+                              <div className="relative z-10 flex h-full items-end gap-1.5 overflow-x-auto pb-1">
+                                {filteredTrend.map((item, index) => {
+                                  const score = Math.max(0, Math.min(100, Number(item.score) || 0));
+                                  const isLatest = index === filteredTrend.length - 1;
+                                  const barColor = score >= 80
+                                    ? 'from-emerald-500 to-emerald-600'
+                                    : score >= 50
+                                      ? 'from-amber-400 to-amber-500'
+                                      : 'from-rose-500 to-rose-600';
+
+                                  return (
+                                    <div
+                                      key={`${item.attempt_id}-${index}`}
+                                      className="group flex h-full min-w-5 flex-1 items-end justify-center"
+                                      title={`${formatDate(item.date)}: ${score.toFixed(1)}%`}
+                                    >
+                                      <div
+                                        className={`w-full min-w-3 max-w-8 rounded-t-lg bg-gradient-to-t ${barColor} transition-all duration-300 group-hover:opacity-85 ${isLatest ? 'ring-2 ring-slate-900 ring-offset-2 ring-offset-white' : ''}`}
+                                        style={{ height: `${Math.max(4, score)}%` }}
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <div className="absolute bottom-2 left-4 text-xs text-slate-500">
+                                {formatDate(filteredTrend[0].date)}
+                              </div>
+                              <div className="absolute bottom-2 right-4 text-xs text-slate-500">
+                                {formatDate(filteredTrend[filteredTrend.length - 1].date)}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
